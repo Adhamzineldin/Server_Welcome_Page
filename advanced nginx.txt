@@ -1,0 +1,326 @@
+# HTTP server block for both domains
+server {
+    listen 80;
+    server_name maayn.ddns.net maayn.tplinkdns.com *.maayn.me maayn.me;
+
+    # Redirect all HTTP traffic to HTTPS
+    return 301 https://$host$request_uri;
+}
+
+# HTTPS server block for maayn.ddns.net and maayn.tplinkdns.com
+# HTTPS server block for maayn.ddns.net and maayn.tplinkdns.com
+server {
+    listen 443 ssl;
+    server_name maayn.ddns.net maayn.tplinkdns.com;
+
+    # SSL configuration
+    ssl_certificate /etc/letsencrypt/live/maayn.ddns.net/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/maayn.ddns.net/privkey.pem; # managed by Certbot
+
+    error_log /var/log/nginx/error.log debug;  # Enable detailed logging
+
+    location / {
+        set $port '';
+        add_header Set-Cookie "test_cookie=test_value; Path=/; SameSite=None; Secure";
+
+        # Use regex to extract the port
+        if ($http_referer ~* /app(\d+)/) {
+            set $port $1;
+            add_header Set-Cookie "app_port=$port; Path=/; SameSite=None; Secure";
+        }
+
+        # Check for the port in the cookie
+        if ($http_cookie ~* app_port=(\d+)) {
+            set $port $1;
+        }
+
+        content_by_lua_block {
+            local port = ngx.var.port
+            if not port or port == "" then
+                ngx.exec("@welcome")
+                return
+            end
+
+            -- Health checks with error handling
+            local res1 = ngx.location.capture("/health" .. port .. "/health_check_upstream1")
+            if res1.status < 500 then
+                ngx.exec("@upstream1")
+            else
+                local res2 = ngx.location.capture("/health" .. port .. "/health_check_upstream2")
+                if res2.status < 500 then
+                    ngx.exec("@upstream2")
+                else
+                    ngx.exec("@welcome")
+                end
+            end
+        }
+
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_next_upstream_tries 1;
+
+        error_page 500 502 503 504 = @fallback;
+    }
+
+    location ~ ^/app(\d+)/ {
+        set $port $1;
+
+        # This will set the upstream based on the port
+        set $upstream "http://127.0.0.1:$port";
+
+        if ($request_uri !~* "/api/") {
+            add_header Set-Cookie "app_port=$port; Path=/; SameSite=None; Secure";
+        }
+
+        # Use the rewrite directive correctly to strip /app31000/
+        rewrite ^/app\d+/(.*)$ /$1 break;
+
+        # Forward the request to the correct upstream service
+        proxy_pass $upstream;
+
+        # Add necessary headers
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+
+        # Health checks with error handling
+        content_by_lua_block {
+            local port = ngx.var.port
+            local res1 = ngx.location.capture("/health" .. port .. "/health_check_upstream1")
+            if res1.status < 500 then
+                ngx.exec("@upstream1")
+            else
+                local res2 = ngx.location.capture("/health" .. port .. "/health_check_upstream2")
+                if res2.status < 500 then
+                    ngx.exec("@upstream2")
+                else
+                    ngx.exec("@welcome")
+                end
+            end
+        }
+    }
+
+    location @upstream1 {
+        if ($request_uri !~* "/api/") {
+            add_header Set-Cookie "app_port=$port; Path=/; SameSite=None; Secure";
+        }
+
+        # This rewrite should not be necessary since we already handle it in the previous location block.
+        # rewrite ^/app\d+/(.*)$ /$1 break;
+
+        proxy_pass http://127.0.0.1:$port;
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_next_upstream_tries 1;
+    }
+
+    location @upstream2 {
+        if ($request_uri !~* "/api/") {
+            add_header Set-Cookie "app_port=$port; Path=/; SameSite=None; Secure";
+        }
+
+        # This rewrite should not be necessary since we already handle it in the previous location block.
+        # rewrite ^/app\d+/(.*)$ /$1 break;
+
+        proxy_pass http://192.168.0.125:$port;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 5s;
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_next_upstream_tries 1;
+    }
+
+    location @welcome {
+        root /home/adham-zineldin/server/Server_Welcome_Page;
+        index index.html;
+    }
+
+    location ~ ^/health(\d+)/health_check_upstream1 {
+        set $port $1;
+        proxy_connect_timeout 2s;
+        proxy_read_timeout 2s;
+        proxy_pass http://127.0.0.1:$port/health_check;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+    }
+
+    location ~ ^/health(\d+)/health_check_upstream2 {
+        set $port $1;
+        proxy_connect_timeout 1s;
+        proxy_read_timeout 1s;
+        proxy_pass http://192.168.0.125:$port/health_check;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+    }
+
+    error_page 502 503 504 = /custom_502.html;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Server block for maayn.me and its subdomains
+server {
+    listen 443 ssl;
+    server_name *.maayn.me maayn.me;
+
+    ssl_certificate /etc/letsencrypt/live/maayn.ddns.net/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/maayn.ddns.net/privkey.pem;
+
+    error_log /var/log/nginx/error.log debug;  # Enable detailed logging
+
+    location / {
+        # Default port, used if no specific port is extracted
+        set $upstream_port "";
+
+        # Extract the port number from the subdomain if present
+        if ($host ~* ^(?<subdomain>.+?)(?<port>\d+)\.maayn\.me$) {
+            set $upstream_port $port;
+        }
+
+
+
+
+
+        # Set the upstream servers
+        set $upstream1 "http://127.0.0.1:$upstream_port";
+        set $upstream2 "http://192.168.0.125:$upstream_port";
+
+
+
+
+        # Use Lua to check the health of upstream1 and upstream2
+        content_by_lua_block {
+        if not upstream_port == "" then
+        ngx.exec("@welcome")
+        return
+    end
+
+
+
+local res1 = ngx.location.capture("/health_check_upstream1")
+    local res2  -- Initialize res2 as nil
+
+    -- Only capture res2 if res1 indicates a problem
+    if res1.status >= 500 then
+        res2 = ngx.location.capture("/health_check_upstream2")
+    end
+
+    -- Choose the upstream based on health checks
+    if res1.status < 500 then
+        -- If upstream1 is healthy
+        ngx.exec("@upstream1")
+    elseif res2 and res2.status < 500 then
+        -- If upstream2 is healthy
+        ngx.exec("@upstream2")
+    else
+        -- If both upstreams are unhealthy
+        ngx.exec("@welcome")
+    end
+
+
+
+        }
+    }
+
+    location @upstream1 {
+        proxy_pass $upstream1;
+
+        # Handle connection failure to upstream1
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_next_upstream_tries 1;  # Limit to one retry
+    }
+
+    location @upstream2 {
+        proxy_pass $upstream2;
+
+        # Set timeout values for the fallback server
+        proxy_connect_timeout 5s;  # Increased for testing
+        proxy_read_timeout 5s;     # Increased for testing
+
+        # Handle connection failure to upstream2
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_next_upstream_tries 1;  # Limit to one retry
+    }
+
+    location @welcome {
+        #proxy_pass "http://127.0.0.1:2501";  # Your welcome or fallback service
+        #return 302 https://maayn.me;
+        root  /home/adham-zineldin/server/Server_Welcome_Page;  # Path to the directory containing welcome.html
+        index index.html;  # Serve welcome.html when @welcome is accessed
+    }
+
+
+    location /health_check_upstream1 {
+       # internal;
+
+        set $upstream_port "2501";
+
+        # Extract the port number from the subdomain if present
+        if ($host ~* ^(?<subdomain>.+?)(?<port>\d+)\.maayn\.me$) {
+            set $upstream_port $port;
+        }
+
+         proxy_connect_timeout 2s;  # Increased for testing
+        proxy_read_timeout 2s;
+
+        # Reverse proxy to upstream1
+        proxy_pass http://127.0.0.1:$upstream_port;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+    }
+
+    # Health check for upstream2
+    location /health_check_upstream2 {
+        #internal;
+        set $upstream_port "2501";
+
+        # Extract the port number from the subdomain if present
+        if ($host ~* ^(?<subdomain>.+?)(?<port>\d+)\.maayn\.me$) {
+            set $upstream_port $port;
+        }
+
+
+        proxy_connect_timeout 1s;  # Increased for testing
+        proxy_read_timeout 1s;
+
+
+        # Reverse proxy to upstream2
+        proxy_pass http://192.168.0.125:$upstream_port;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+    }
+
+
+
+    # Health check endpoint
+#    location /health {
+ #       access_log off;  # Disable access log for health check
+  #      return 200 "Healthy\n";  # Return a simple healthy response
+   # }
+}
