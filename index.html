@@ -83,6 +83,73 @@
             filter: blur(1px);
         }
 
+        /* New background animated shapes */
+        .bg-shapes {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            z-index: 0;
+            overflow: hidden;
+        }
+
+        .bg-shape {
+            position: absolute;
+            opacity: 0.08;
+            filter: blur(2px);
+        }
+
+        .bg-circle {
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ff5e62, #ff9966);
+        }
+
+        .bg-square {
+            background: linear-gradient(135deg, #302b63, #24243e);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .bg-triangle {
+            width: 0;
+            height: 0;
+            border-left: 40px solid transparent;
+            border-right: 40px solid transparent;
+            border-bottom: 70px solid rgba(255, 158, 102, 0.8);
+        }
+
+        .bg-donut {
+            border-radius: 50%;
+            border: 8px solid rgba(255, 94, 98, 0.5);
+            background: transparent;
+        }
+
+        .bg-plus {
+            position: relative;
+        }
+
+        .bg-plus:before, .bg-plus:after {
+            content: '';
+            position: absolute;
+            background-color: rgba(94, 98, 255, 0.5);
+        }
+
+        .bg-plus:before {
+            width: 100%;
+            height: 40%;
+            top: 30%;
+            left: 0;
+        }
+
+        .bg-plus:after {
+            width: 40%;
+            height: 100%;
+            top: 0;
+            left: 30%;
+        }
+
+        /* End of new background shapes */
+
         .welcome-container {
             position: relative;
             z-index: 2;
@@ -398,6 +465,11 @@
                 width: 40px;
                 height: 3px;
             }
+
+            /* Mobile adjustments for background shapes */
+            .bg-shape {
+                opacity: 0.05;
+            }
         }
 
         @keyframes pulse {
@@ -416,6 +488,7 @@
 <body>
 <div class="background-grid" id="background-grid"></div>
 <div class="particles" id="particles"></div>
+<div class="bg-shapes" id="bg-shapes"></div>
 
 <div class="welcome-container">
     <h1>Welcome to <span>Adham's Server</span></h1>
@@ -489,10 +562,66 @@
         }
     }
 
+    // Create background animated shapes
+    function createBackgroundShapes() {
+        const shapes = document.getElementById('bg-shapes');
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+
+        // Determine number of shapes based on screen size
+        const numShapes = (windowWidth < 768) ? 20 : 35;
+
+        // Shape types
+        const shapeTypes = ['bg-circle', 'bg-square', 'bg-triangle', 'bg-donut', 'bg-plus'];
+
+        for (let i = 0; i < numShapes; i++) {
+            const shape = document.createElement('div');
+
+            // Randomly select shape type
+            const shapeType = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
+            shape.className = `bg-shape ${shapeType}`;
+
+            // Random sizes - responsive to viewport
+            const sizeVariation = Math.random() * 0.7 + 0.3; // 30% to 100% of base size
+            let size;
+
+            // Base size responsive to viewport
+            const baseSize = Math.min(windowWidth, windowHeight) * 0.08;
+            size = baseSize * sizeVariation;
+
+            // Random positions
+            const posX = Math.random() * 98; // percentage
+            const posY = Math.random() * 98; // percentage
+
+            // Apply styles
+            shape.style.width = `${size}px`;
+            shape.style.height = `${size}px`;
+            shape.style.left = `${posX}%`;
+            shape.style.top = `${posY}%`;
+
+            // Different opacities
+            shape.style.opacity = Math.random() * 0.15 + 0.05;
+
+            shapes.appendChild(shape);
+
+            // Animate each shape
+            gsap.to(shape, {
+                x: `${(Math.random() - 0.5) * 100}`,
+                y: `${(Math.random() - 0.5) * 100}`,
+                rotation: Math.random() * 360,
+                duration: Math.random() * 50 + 30,
+                repeat: -1,
+                yoyo: true,
+                ease: "sine.inOut"
+            });
+        }
+    }
+
     // Create particles
     function createParticles() {
         const container = document.getElementById('particles');
-        const numParticles = 50;
+        // Responsive number of particles based on screen size
+        const numParticles = window.innerWidth < 768 ? 30 : 50;
 
         for (let i = 0; i < numParticles; i++) {
             const particle = document.createElement('div');
@@ -713,12 +842,24 @@
             });
     }
 
+    // Handle window resize for responsive shapes
+    function handleResize() {
+        // Clear existing shapes
+        document.getElementById('bg-shapes').innerHTML = '';
+        // Create new shapes appropriate for the new size
+        createBackgroundShapes();
+    }
+
     // Initialize everything when the page loads
     window.addEventListener('load', function() {
         createGrid();
         createParticles();
+        createBackgroundShapes();
         initAnimations();
         startCountdown();
+
+        // Add resize event listener for responsive shapes
+        window.addEventListener('resize', handleResize);
 
         // Add refresh button functionality
         document.getElementById('refresh-button').addEventListener('click', function() {
