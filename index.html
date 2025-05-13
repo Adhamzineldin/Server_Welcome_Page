@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Adham's Server | Status Page</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='2' width='20' height='8' rx='2' ry='2' fill='%23302b63'/%3E%3Crect x='2' y='14' width='20' height='8' rx='2' ry='2' fill='%23302b63'/%3E%3Ccircle cx='6' cy='6' r='1' fill='%23ff5e62'/%3E%3Ccircle cx='6' cy='18' r='1' fill='%23ff5e62'/%3E%3C/svg%3E"
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='2' width='20' height='8' rx='2' ry='2' fill='%23302b63'/%3E%3Crect x='2' y='14' width='20' height='8' rx='2' ry='2' fill='%23302b63'/%3E%3Ccircle cx='6' cy='6' r='1' fill='%23ff5e62'/%3E%3Ccircle cx='6' cy='18' r='1' fill='%23ff5e62'/%3E%3C/svg%3E">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.5/gsap.min.js"></script>
     <style>
@@ -334,6 +334,18 @@
             color: white;
         }
 
+        .refresh-info {
+            margin-top: 1rem;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.6);
+            text-align: center;
+        }
+
+        .refresh-countdown {
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
         @keyframes pulse {
             0% {
                 box-shadow: 0 0 0 0 rgba(255, 94, 98, 0.5);
@@ -391,6 +403,7 @@
     </div>
 
     <button class="button" id="refresh-button">Refresh Status</button>
+    <p class="refresh-info">Auto-refreshing in <span id="countdown" class="refresh-countdown">5</span> seconds</p>
 
     <div class="footer">
         <p>&copy; 2025 Adham Zineldin • All rights reserved</p>
@@ -398,6 +411,9 @@
 </div>
 
 <script>
+    // Page identifier - used to check if content has changed
+    const PAGE_SIGNATURE = "status-page-offline-signature";
+
     // Background grid
     function createGrid() {
         const grid = document.getElementById('background-grid');
@@ -589,8 +605,58 @@
         });
 
         // Set current time
+        updateLastChecked();
+    }
+
+    function updateLastChecked() {
         const now = new Date();
-        document.getElementById('last-checked').textContent = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        document.getElementById('last-checked').textContent = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+    }
+
+    // Auto-refresh countdown
+    let countdownValue = 5;
+    let countdownInterval;
+
+    function startCountdown() {
+        const countdownElement = document.getElementById('countdown');
+        countdownElement.textContent = countdownValue;
+
+        countdownInterval = setInterval(() => {
+            countdownValue -= 1;
+            countdownElement.textContent = countdownValue;
+
+            if (countdownValue <= 0) {
+                clearInterval(countdownInterval);
+                checkServerStatus();
+            }
+        }, 1000);
+    }
+
+    // Check if server is up by fetching the current URL
+    function checkServerStatus() {
+        updateLastChecked();
+
+        // Fetch the current page to see if it's changed
+        fetch(window.location.href)
+            .then(response => response.text())
+            .then(html => {
+                // Check if the fetched page contains our signature
+                if (html.indexOf(PAGE_SIGNATURE) === -1) {
+                    // Content is different, server is up!
+                    console.log("Server is up! Refreshing page...");
+                    window.location.reload();
+                } else {
+                    // Still the same page, restart countdown
+                    countdownValue = 5;
+                    startCountdown();
+                }
+            })
+            .catch(error => {
+                console.error("Error checking server status:", error);
+                // Error occurred, restart countdown
+                countdownValue = 5;
+                startCountdown();
+            });
     }
 
     // Initialize everything when the page loads
@@ -598,10 +664,14 @@
         createGrid();
         createParticles();
         initAnimations();
+        startCountdown();
 
         // Add refresh button functionality
         document.getElementById('refresh-button').addEventListener('click', function() {
             this.textContent = "Refreshing...";
+
+            // Reset countdown
+            clearInterval(countdownInterval);
 
             // Add a spinning animation to the button before refreshing
             gsap.to(this, {
@@ -609,12 +679,14 @@
                 duration: 0.8,
                 ease: "power1.inOut",
                 onComplete: function() {
-                    // Actually refresh the page
-                    window.location.reload();
+                    checkServerStatus();
                 }
             });
         });
     });
 </script>
+
+<!-- Page signature to detect changes -->
+<!-- PAGE_IDENTIFIER: status-page-offline-signature -->
 </body>
 </html>
