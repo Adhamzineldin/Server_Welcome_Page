@@ -822,15 +822,29 @@
     function checkServerStatus() {
         updateLastChecked();
 
-        // Fetch the current page to see if it's changed
-        fetch(window.location.href)
+        // Create a cache-busting URL by adding a timestamp parameter
+        const cacheBustUrl = new URL(window.location.href);
+        cacheBustUrl.searchParams.set('nocache', Date.now());
+
+        // Fetch with cache-busting headers and URL
+        fetch(cacheBustUrl.toString(), {
+            method: 'GET',
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            },
+            // Force reload from network, not cache
+            cache: 'no-store'
+        })
             .then(response => response.text())
             .then(html => {
                 // Check if the fetched page contains our signature
                 if (html.indexOf(PAGE_SIGNATURE) === -1) {
                     // Content is different, server is up!
                     console.log("Server is up! Refreshing page...");
-                    window.location.reload();
+                    // Force reload from server
+                    window.location.reload(true);
                 } else {
                     // Still the same page, restart countdown
                     countdownValue = 5;
